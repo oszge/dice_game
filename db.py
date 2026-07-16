@@ -5,6 +5,7 @@ import secrets
 from pathlib import Path
 from typing import Any
 
+from psycopg_pool import ConnectionPool
 import pandas as pd
 import psycopg
 import streamlit as st
@@ -38,12 +39,34 @@ def _database_url() -> str:
     return str(url)
 
 
-def _connect() -> psycopg.Connection:
-    return psycopg.connect(
-        _database_url(),
-        row_factory=dict_row,
-        connect_timeout=10,
+@st.cache_resource(show_spinner=False)
+def _connection_pool() -> ConnectionPool:
+    """Create one shared PostgreSQL connection pool."""
+
+    pool = ConnectionPool(
+        conninfo=_database_url(),
+        kwargs={
+            "row_factory": dict_row,
+            "connect_timeout": 10,
+        },
+        min_size=1,
+        max_size=4,
+        max_idle=240,
+        max_lifetime=1800,
+        timeout=10,
+        open=True,
     )
+
+    # A kapcsolatokat egyszer, az alkalmazás indulásakor készíti elő.
+    pool.wait(timeout=15)
+
+    return pool
+
+
+def _connect():
+    """Get a connection from the shared pool."""
+
+    return _connection_pool().connection()
 
 
 @st.cache_resource
@@ -53,17 +76,19 @@ def _sqlalchemy_engine():
         url = url.replace("postgresql://", "postgresql+psycopg://", 1)
     return create_engine(url, pool_pre_ping=True)
 
+@st.cache_resource(show_spinner=False)
+def init_db() -> bool:
+    """Create the database tables once per application process."""
 
-def init_db() -> None:
-    """Create the tables when the app starts.
+    schema = Path(__file__).with_name("schema.sql").read_text(
+        encoding="utf-8"
+    )
 
-    schema.sql contains only simple CREATE statements, so running the complete
-    file as a non-prepared command is safe here.
-    """
-    schema = Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")
     with _connect() as conn:
         with conn.cursor() as cur:
             cur.execute(schema, prepare=False)
+
+    return True
 
 
 def _normalize(value: str) -> str:
@@ -155,6 +180,46 @@ def _find_open_match(cur: psycopg.Cursor, player_id: int) -> dict[str, Any] | No
         (player_id, player_id),
     ).fetchone()
 
+def get_open_match(player_id: int) -> dict[str, Any] | None:
+    """Load the player's open match and its rounds using one connection."""
+
+    with _connect() as conn:
+        match = conn.execute(
+            """
+            SELECT
+                m.*,
+                p1.nickname AS player1_nickname,
+                p2.nickname AS player2_nickname
+            FROM "match" AS m
+            JOIN player AS p1 ON p1.id = m.player1_id
+            JOIN player AS p2 ON p2.id = m.player2_id
+            WHERE (m.player1_id = %s OR m.player2_id = %s)
+              AND m.status IN ('active', 'awaiting_rematch')
+            ORDER BY m.id DESC
+            LIMIT 1
+            """,
+            (player_id, player_id),
+        ).fetchone()
+
+        if not match:
+            return None
+
+        match["rounds"] = conn.execute(
+            """
+            SELECT
+                round_number,
+                player1_roll,
+                player2_roll,
+                round_winner_player_id,
+                resolved_at
+            FROM match_round
+            WHERE match_id = %s
+            ORDER BY round_number
+            """,
+            (match["id"],),
+        ).fetchall()
+
+    return match
 
 def get_open_match_id(player_id: int) -> int | None:
     with _connect() as conn:
@@ -478,6 +543,7 @@ def vote_rematch(match_id: int, player_id: int, accept: bool) -> int | None:
             return None
 
 
+@st.cache_data(ttl=15, show_spinner=False)
 def leaderboard() -> pd.DataFrame:
     query = text(
         """
@@ -490,9 +556,11 @@ def leaderboard() -> pd.DataFrame:
         LIMIT 20
         """
     )
+
     return pd.read_sql_query(query, _sqlalchemy_engine())
 
 
+@st.cache_data(ttl=10, show_spinner=False)
 def recent_matches(player_id: int) -> pd.DataFrame:
     query = text(
         """
@@ -513,6 +581,7 @@ def recent_matches(player_id: int) -> pd.DataFrame:
         LIMIT 10
         """
     )
+
     return pd.read_sql_query(
         query,
         _sqlalchemy_engine(),

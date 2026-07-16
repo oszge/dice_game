@@ -135,7 +135,7 @@ def render_active_match(match: dict, player_id: int) -> None:
             try:
                 rolled = db.roll_dice(int(match["id"]), player_id)
                 st.toast(f"You rolled {rolled} {DICE[rolled]}")
-                st.rerun()
+                st.rerun(scope="fragment")
             except db.GameError as exc:
                 st.error(str(exc))
     else:
@@ -199,61 +199,86 @@ def render_rematch(match: dict, player_id: int) -> None:
         if st.button("Accept rematch", type="primary", use_container_width=True):
             try:
                 db.vote_rematch(int(match["id"]), player_id, True)
-                st.rerun()
+                st.rerun(scope="fragment")
             except db.GameError as exc:
                 st.error(str(exc))
     with reject_col:
         if st.button("Reject rematch", use_container_width=True):
             try:
                 db.vote_rematch(int(match["id"]), player_id, False)
-                st.rerun()
+                st.rerun(scope="fragment")
             except db.GameError as exc:
                 st.error(str(exc))
 
 
 @st.fragment(run_every="2s")
 def live_area(player_id: int) -> None:
-    match_id = db.get_open_match_id(player_id)
-    if match_id:
-        match = db.get_match(match_id)
-        if not match:
-            st.warning("The match could not be loaded.")
-            return
+    match = db.get_open_match(player_id)
+
+    if match:
         if match["status"] == "active":
             render_active_match(match, player_id)
+
         elif match["status"] == "awaiting_rematch":
             render_rematch(match, player_id)
+
         return
 
     st.subheader("Find an opponent")
+
     if db.is_queued(player_id):
-        st.info("You are in the matchmaking queue. Looking for another player…")
+        st.info(
+            "You are in the matchmaking queue. "
+            "Looking for another player…"
+        )
+
         if st.button("Leave queue", use_container_width=True):
             db.leave_queue(player_id)
-            st.rerun()
+            st.rerun(scope="fragment")
+
     else:
-        if st.button("Join matchmaking queue", type="primary", use_container_width=True):
+        if st.button(
+            "Join matchmaking queue",
+            type="primary",
+            use_container_width=True,
+        ):
             try:
                 match_id = db.join_queue(player_id)
+
                 if match_id:
-                    st.toast("Opponent found. The match is starting!")
-                st.rerun()
+                    st.toast(
+                        "Opponent found. The match is starting!"
+                    )
+
+                st.rerun(scope="fragment")
+
             except db.GameError as exc:
                 st.error(str(exc))
 
     st.divider()
+
     leaderboard_col, recent_col = st.columns(2)
+
     with leaderboard_col:
         st.markdown("#### Leaderboard")
-        st.dataframe(db.leaderboard(), hide_index=True, use_container_width=True)
+        st.dataframe(
+            db.leaderboard(),
+            hide_index=True,
+            use_container_width=True,
+        )
+
     with recent_col:
         st.markdown("#### Your recent matches")
         recent = db.recent_matches(player_id)
+
         if recent.empty:
             st.caption("No completed matches yet.")
         else:
-            st.dataframe(recent, hide_index=True, use_container_width=True)
-
+            st.dataframe(
+                recent,
+                hide_index=True,
+                use_container_width=True,
+            )
 
 def show_main_page() -> None:
     player_id = int(st.session_state.player_id)
