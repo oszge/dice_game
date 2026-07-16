@@ -25,11 +25,11 @@ class GameError(Exception):
 def _database_url() -> str:
     """Return DATABASE_URL from Streamlit secrets or the environment."""
     try:
-        url = st.secrets.get("postgresql://neondb_owner:npg_SJm62wPXNclo@ep-calm-hat-asz7ej4o-pooler.c-4.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require")
+        url = st.secrets.get("DATABASE_URL")
     except (FileNotFoundError, KeyError):
         url = None
 
-    url = url or os.getenv("postgresql://neondb_owner:npg_SJm62wPXNclo@ep-calm-hat-asz7ej4o-pooler.c-4.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require")
+    url = url or os.getenv("DATABASE_URL")
     if not url:
         raise RuntimeError(
             "DATABASE_URL is missing. Add it to .streamlit/secrets.toml "
