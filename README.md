@@ -1,122 +1,101 @@
 # Neon Dice Arena
 
-A two-player online dice game built with Streamlit, Neon Postgres, Psycopg,
-SQLAlchemy, Pandas, and Argon2 password hashing.
+A web-only multiplayer dice game built with Python and Streamlit, using NeonDB for persistent game data.
+
+This game is designed to be played online through the browser only and is not a local offline game.
+
+Live app: https://dicegamezz.streamlit.app/
+
+## Overview
+
+Neon Dice Arena is a browser-based two-player dice game where users create an account, sign in, join a matchmaking queue, and play a five-round match against another online player. The app stores match data in PostgreSQL and updates the leaderboard in real time.
+
+The game is intended for quick online play and supports:
+
+- Registration and login
+- Username and nickname validation
+- Secure password hashing with Argon2
+- Matchmaking queue management
+- Five-round competitive play
+- Match history and leaderboard tracking
+- Rematch voting flow
 
 ## Features
 
-- Multiple-player registration and sign-in
-- Unique usernames and nicknames
-- Passwords stored as Argon2 hashes
-- Database-backed matchmaking queue
-- One active opponent per player
-- Five rounds, one dice roll per player per round
-- Match and round history stored in PostgreSQL
-- Winner's `matches_won` value incremented atomically
-- Rematch starts only after both players accept
-- Match closes only after both players reject
-- Live polling every two seconds with a Streamlit fragment
-- Pandas leaderboard and recent-match tables
+- User registration with unique username and nickname checks
+- Passwords stored as Argon2 hashes, not as raw text
+- Database-backed online queue using PostgreSQL
+- One active match per player at a time
+- Each match consists of five rounds
+- One dice roll per player per round
+- Match results and round history saved to the database
+- Leaderboard showing wins
+- Rematch flow that requires both players to accept
+- Automatic match closure if the rematch timeout expires
+- Live updates in the UI using Streamlit fragments
 
-A dice tie counts as a tied round. Therefore, a five-round match can also end in
-a draw; in that case, neither player's `matches_won` value is incremented.
+## Tech stack
 
-## Project files
+- Python
+- Streamlit
+- PostgreSQL / NeonDB
+- Psycopg
+- SQLAlchemy
+- Pandas
+- Argon2 password hashing
+
+## Project structure
 
 ```text
-neon_dice_game/
+dice_game/
 ├── app.py
 ├── db.py
 ├── schema.sql
 ├── requirements.txt
 ├── README.md
-└── .streamlit/
-    └── secrets.toml.example
+├── .streamlit/
+│   └── secrets.toml
+└── .gitignore
 ```
 
-## Setup
+## How to play
 
-1. Create a Neon project and copy its pooled PostgreSQL connection string.
-2. Create and activate a virtual environment.
-3. Install dependencies:
+This project is designed specifically for online gameplay in the browser.
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+To play the game, open the public web app here:
 
-4. Copy the example secrets file:
+https://dicegamezz.streamlit.app/
 
-   **Windows PowerShell**
+The app connects to NeonDB for all persistent game data, including accounts, match state, queue status, and leaderboard information.
 
-   ```powershell
-   Copy-Item .streamlit/secrets.toml.example .streamlit/secrets.toml
-   ```
+No local installation or local game session is required for normal use.
 
-   **macOS/Linux**
+## How the game works
 
-   ```bash
-   cp .streamlit/secrets.toml.example .streamlit/secrets.toml
-   ```
+1. Create an account with a username, nickname, and password.
+2. Sign in with your account.
+3. Join the matchmaking queue.
+4. When another player is found, a match starts.
+5. Each player rolls a die for each round.
+6. After five rounds, the winner is determined.
+7. The app tracks matches and updates the leaderboard.
+8. Players can accept or reject a rematch.
 
-5. Replace `DATABASE_URL` with the Neon connection string.
-6. Start the app:
+## Game rules
 
-   ```bash
-   streamlit run app.py
-   ```
+- A match lasts up to five rounds.
+- Each round, both players roll one die.
+- The higher roll wins the round.
+- If both dice are equal, the round is a tie.
+- A match can also end in a draw.
+- Only the winner's `matches_won` value increases after a non-draw result.
 
-The app runs `schema.sql` automatically on startup. You may also paste the same
-file into the Neon SQL Editor and execute it once.
+## Deployment
 
-## Testing multiplayer locally
+This project is online and accessible here:
 
-Open the app in a normal browser window and an incognito/private window. Create
-a different account in each window, sign in, and join the queue from both.
+https://dicegamezz.streamlit.app/
 
-## Main SQL operations
+## Notes
 
-### Register a player
-
-```sql
-INSERT INTO player (nickname, username, password)
-VALUES (%s, %s, %s)
-RETURNING id;
-```
-
-### Find an open match
-
-```sql
-SELECT *
-FROM "match"
-WHERE (player1_id = %s OR player2_id = %s)
-  AND status IN ('active', 'awaiting_rematch')
-ORDER BY id DESC
-LIMIT 1;
-```
-
-### Increment the winner
-
-```sql
-UPDATE player
-SET matches_won = matches_won + 1
-WHERE id = %s;
-```
-
-### Leaderboard
-
-```sql
-SELECT
-    DENSE_RANK() OVER (ORDER BY matches_won DESC) AS rank,
-    nickname,
-    matches_won
-FROM player
-ORDER BY matches_won DESC, LOWER(nickname);
-```
-
-## Important production improvements
-
-This is a strong course-project prototype, but a public production deployment
-should also add CSRF/session hardening, rate limiting, account recovery,
-structured logging, automated tests, stale-queue cleanup, match abandonment,
-and stronger database-level enforcement that a player cannot appear in two
-open matches.
+The app is designed as a small real-time multiplayer project and uses a database-driven queue and persistent game state. For a production-grade deployment, you would typically add stronger session protection, rate limiting, better queue cleanup logic, and automated tests.
