@@ -189,9 +189,9 @@ def render_rematch(match: dict, player_id: int) -> None:
         f"Opponent: {vote_label(other_vote)}"
     )
     st.write(
-        "Both players must accept to start a rematch. Both must reject to "
-        "return to the main menu. A mixed vote remains open and either "
-        "player may change their choice."
+        "Both players must accept within 2 minutes to start a rematch. "
+        "If both players do not accept before the timeout, the match closes "
+        "automatically and returns to the main menu."
     )
 
     accept_col, reject_col = st.columns(2)

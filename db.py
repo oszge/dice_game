@@ -184,6 +184,21 @@ def get_open_match(player_id: int) -> dict[str, Any] | None:
     """Load the player's open match and its rounds using one connection."""
 
     with _connect() as conn:
+        conn.execute(
+            """
+            UPDATE "match"
+            SET player1_rematch = COALESCE(player1_rematch, FALSE),
+                player2_rematch = COALESCE(player2_rematch, FALSE),
+                status = 'closed'
+            WHERE status = 'awaiting_rematch'
+              AND finished_at IS NOT NULL
+              AND finished_at <= NOW() - INTERVAL '2 minutes'
+              AND NOT (player1_rematch IS TRUE AND player2_rematch IS TRUE)
+              AND (player1_id = %s OR player2_id = %s)
+            """,
+            (player_id, player_id),
+        )
+
         match = conn.execute(
             """
             SELECT
