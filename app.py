@@ -6,7 +6,7 @@ import streamlit as st
 import db
 
 
-st.set_page_config(page_title="Neon Dice Arena", page_icon="🎲", layout="wide")
+st.set_page_config(page_title="Neon Dice Arena", page_icon="", layout="wide")
 
 DICE = {1: "⚀", 2: "⚁", 3: "⚂", 4: "⚃", 5: "⚄", 6: "⚅"}
 
